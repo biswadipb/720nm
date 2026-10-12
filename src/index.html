@@ -31,6 +31,7 @@
   <label class="row">Foliage glow <input type="range" id="foliage" min="0" max="2" step="0.01" value="0.53"></label>
   <label class="row">Sky darkening <input type="range" id="sky" min="0" max="1" step="0.01" value="0.21"></label>
   <label class="row">Hue shift <input type="range" id="hue" min="-180" max="180" step="1" value="4"></label>
+  <label class="row">Highlight whitening <input type="range" id="whiten" min="0" max="1" step="0.01" value="0.7"></label>
   <label class="row">Contrast <input type="range" id="contrast" min="0.6" max="1.6" step="0.01" value="1.38"></label>
   <label class="row">Format
     <select id="fmt">
@@ -47,7 +48,7 @@
 <script>
 // Each preset maps [N (fake NIR), r, g, b] -> output [R, G, B]
 const PRESETS = {
-  'Flamingo': [[1,.15,0,0],[0,.9,.1,0],[0,0,.9,.45]],
+  'Flamingo':   [[1,.12,0,0],[0,.85,.05,0],[0,0,.5,.18]],
   'Goldie':     [[1,0,.1,0],[.7,0,.25,0],[0,.35,0,.35]],
   'Azure Gold':[[.95,0,.1,0],[.45,0,.4,0],[-.25,0,0,.95]],
   'Glacier':     [[0,0,0,1],[.45,0,.55,0],[.9,.1,0,0]],
@@ -67,7 +68,7 @@ function sstep(a,b,x){x=Math.min(1,Math.max(0,(x-a)/(b-a)));return x*x*(3-2*x)}
 function render(){
   if(!src) return;
   const M = PRESETS[current];
-  const fol = +$('foliage').value, sky = +$('sky').value, con = +$('contrast').value, hue = +$('hue').value*Math.PI/180;
+  const fol = +$('foliage').value, sky = +$('sky').value, con = +$('contrast').value, hue = +$('hue').value*Math.PI/180, whiten = +$('whiten').value;
   const out = new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
   const d = out.data;
   // hue rotation matrix (YIQ-free, rotation around gray axis)
@@ -80,7 +81,7 @@ function render(){
     const r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
     const lum = .3*r+.59*g+.11*b;
     // foliage: green dominates; sky/water: blue dominates
-    const f = sstep(.02,.18,g-Math.max(r*.9,b)) ;
+    const f = sstep(-.03,.1,g-r*.92) * sstep(.0,.08,g-b);
     const sk = sstep(.0,.2,b-r) * (1-f);
     let N = lum*(1-sky*sk*.9) + f*fol*(.45+.5*lum) + .12*r*(1-f);
     N = Math.min(1,Math.max(0,N));
@@ -92,6 +93,10 @@ function render(){
       G=H[1][0]*o[0]+H[1][1]*o[1]+H[1][2]*o[2];
       B=H[2][0]*o[0]+H[2][1]*o[1]+H[2][2]*o[2];
     } else {R=o[0];G=o[1];B=o[2]}
+    // real IR: bright areas (clouds, leaves) roll off toward white instead of keeping the tint
+    R=Math.max(0,R);G=Math.max(0,G);B=Math.max(0,B);
+    const L=.3*R+.59*G+.11*B, t=sstep(.4,.95,L)*whiten;
+    R+=(L-R)*t; G+=(L-G)*t; B+=(L-B)*t;
     d[i]  =255*Math.min(1,Math.max(0,(R-.5)*con+.5));
     d[i+1]=255*Math.min(1,Math.max(0,(G-.5)*con+.5));
     d[i+2]=255*Math.min(1,Math.max(0,(B-.5)*con+.5));
@@ -128,7 +133,7 @@ Object.keys(PRESETS).forEach(n=>{
   b.onclick=()=>{current=n;[...pc.children].forEach(x=>x.className=x===b?'on':'');render()};
   pc.appendChild(b);
 });
-['foliage','sky','hue','contrast'].forEach(i=>$(i).oninput=render);
+['foliage','sky','hue','whiten','contrast'].forEach(i=>$(i).oninput=render);
 $('file').onchange=e=>{
   const f=e.target.files[0];if(!f)return;
   const img=new Image();img.onload=()=>load(img);img.src=URL.createObjectURL(f);
