@@ -3,16 +3,33 @@
   "productName": "720nm",
   "version": "0.1.0",
   "identifier": "com.biswadipb.nm720",
-  "build": { "frontendDist": "../src" },
+  "build": {
+    "frontendDist": "../src"
+  },
   "app": {
     "windows": [
-      { "title": "720nm", "width": 1100, "height": 760, "minWidth": 420, "minHeight": 500 }
+      {
+        "title": "720nm",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 420,
+        "minHeight": 500
+      }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }

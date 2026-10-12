@@ -19,6 +19,7 @@
   label.row{display:flex;flex-direction:column;gap:4px;color:var(--mut)}
   input[type=range]{width:100%}
   input[type=file]{display:none}
+  select{background:#2a2a36;color:var(--fg);border:1px solid #3a3a4a;border-radius:6px;padding:8px;font:inherit}
 </style>
 </head>
 <body>
@@ -31,7 +32,17 @@
   <label class="row">Sky darkening <input type="range" id="sky" min="0" max="1" step="0.01" value="0.5"></label>
   <label class="row">Hue shift <input type="range" id="hue" min="-180" max="180" step="1" value="0"></label>
   <label class="row">Contrast <input type="range" id="contrast" min="0.6" max="1.6" step="0.01" value="1.1"></label>
-  <button class="primary" id="save">Save PNG</button>
+  <label class="row">Format
+    <select id="fmt">
+      <option value="png">PNG (lossless)</option>
+      <option value="jpeg">JPEG</option>
+      <option value="webp">WebP</option>
+      <option value="bmp">BMP</option>
+      <option value="tiff">TIFF (uncompressed)</option>
+    </select>
+  </label>
+  <label class="row" id="qrow">Quality <input type="range" id="quality" min="0.5" max="1" step="0.01" value="0.92"></label>
+  <button class="primary" id="save">Save image</button>
 </aside>
 <script>
 // Each preset maps [N (fake NIR), r, g, b] -> output [R, G, B]
@@ -119,7 +130,59 @@ $('file').onchange=e=>{
   const f=e.target.files[0];if(!f)return;
   const img=new Image();img.onload=()=>load(img);img.src=URL.createObjectURL(f);
 };
-$('save').onclick=()=>{const a=document.createElement('a');a.download='ir-'+current.toLowerCase().replace(/\W+/g,'-')+'.png';a.href=cv.toDataURL('image/png');a.click()};
+
+function le(n,v){const o=[];for(let i=0;i<n;i++)o.push((v>>>(8*i))&255);return o}
+function encodeBMP(){
+  const w=cv.width,h=cv.height,d=ctx.getImageData(0,0,w,h).data,row=(w*3+3)&~3,size=54+row*h;
+  const out=new Uint8Array(size);
+  out.set([66,77,...le(4,size),0,0,0,0,...le(4,54),...le(4,40),...le(4,w),...le(4,h),1,0,24,0,...le(4,0),...le(4,row*h),...le(4,2835),...le(4,2835),...le(4,0),...le(4,0)]);
+  for(let y=0;y<h;y++){let o=54+(h-1-y)*row;for(let x=0;x<w;x++){const i=(y*w+x)*4;out[o++]=d[i+2];out[o++]=d[i+1];out[o++]=d[i]}}
+  return new Blob([out],{type:'image/bmp'});
+}
+function encodeTIFF(){
+  const w=cv.width,h=cv.height,d=ctx.getImageData(0,0,w,h).data,n=w*h*3;
+  const entries=[[256,4,1,w],[257,4,1,h],[258,3,3,0],[259,3,1,1],[262,3,1,2],[273,4,1,0],[277,3,1,3],[278,4,1,h],[279,4,1,n],[284,3,1,1]];
+  const ifdLen=2+entries.length*12+4, bpsOff=8+ifdLen, dataOff=bpsOff+6;
+  const buf=new ArrayBuffer(dataOff+n),dv=new DataView(buf);
+  dv.setUint16(0,0x4949,true);dv.setUint16(2,42,true);dv.setUint32(4,8,true);
+  dv.setUint16(8,entries.length,true);
+  entries.forEach(([t,ty,c,v],i)=>{
+    const o=10+i*12;dv.setUint16(o,t,true);dv.setUint16(o+2,ty,true);dv.setUint32(o+4,c,true);
+    if(t===258)dv.setUint32(o+8,bpsOff,true);else if(t===273)dv.setUint32(o+8,dataOff,true);
+    else if(ty===3)dv.setUint16(o+8,v,true);else dv.setUint32(o+8,v,true);
+  });
+  dv.setUint32(10+entries.length*12,0,true);
+  [8,8,8].forEach((v,i)=>dv.setUint16(bpsOff+i*2,v,true));
+  const px=new Uint8Array(buf,dataOff);
+  for(let i=0,j=0;i<d.length;i+=4){px[j++]=d[i];px[j++]=d[i+1];px[j++]=d[i+2]}
+  return new Blob([buf],{type:'image/tiff'});
+}
+async function encode(fmt){
+  if(fmt==='bmp')return {blob:encodeBMP(),ext:'bmp'};
+  if(fmt==='tiff')return {blob:encodeTIFF(),ext:'tif'};
+  const mime='image/'+fmt, q=+$('quality').value;
+  const blob=await new Promise(r=>cv.toBlob(r,mime,q));
+  if(blob&&blob.type===mime)return {blob,ext:fmt==='jpeg'?'jpg':fmt};
+  alert(fmt.toUpperCase()+' export is not supported on this platform. Saved as PNG instead.');
+  return {blob:await new Promise(r=>cv.toBlob(r,'image/png')),ext:'png'};
+}
+const fmtSel=$('fmt');
+fmtSel.onchange=()=>{$('qrow').style.display=(fmtSel.value==='jpeg'||fmtSel.value==='webp')?'flex':'none'};
+fmtSel.onchange();
+$('save').onclick=async()=>{
+  if(!src)return;
+  const {blob,ext}=await encode(fmtSel.value);
+  const name='720nm-'+current.toLowerCase().replace(/\W+/g,'-')+'.'+ext;
+  const T=window.__TAURI__;
+  if(T&&T.dialog&&T.fs){
+    const path=await T.dialog.save({defaultPath:name,filters:[{name:ext.toUpperCase(),extensions:[ext]}]});
+    if(!path)return;
+    await T.fs.writeFile(path,new Uint8Array(await blob.arrayBuffer()));
+    return;
+  }
+  const a=document.createElement('a');a.download=name;a.href=URL.createObjectURL(blob);a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+};
 demo();
 </script>
 </body>
