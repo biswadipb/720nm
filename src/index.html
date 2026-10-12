@@ -28,10 +28,10 @@
   <h1>720nm</h1>
   <label class="btn">Open photo<input type="file" id="file" accept="image/*"></label>
   <div class="presets" id="presets"></div>
-  <label class="row">Foliage glow <input type="range" id="foliage" min="0" max="2" step="0.01" value="1"></label>
-  <label class="row">Sky darkening <input type="range" id="sky" min="0" max="1" step="0.01" value="0.5"></label>
-  <label class="row">Hue shift <input type="range" id="hue" min="-180" max="180" step="1" value="0"></label>
-  <label class="row">Contrast <input type="range" id="contrast" min="0.6" max="1.6" step="0.01" value="1.1"></label>
+  <label class="row">Foliage glow <input type="range" id="foliage" min="0" max="2" step="0.01" value="0.53"></label>
+  <label class="row">Sky darkening <input type="range" id="sky" min="0" max="1" step="0.01" value="0.21"></label>
+  <label class="row">Hue shift <input type="range" id="hue" min="-180" max="180" step="1" value="4"></label>
+  <label class="row">Contrast <input type="range" id="contrast" min="0.6" max="1.6" step="0.01" value="1.38"></label>
   <label class="row">Format
     <select id="fmt">
       <option value="png">PNG (lossless)</option>
@@ -58,7 +58,7 @@ const PRESETS = {
   'Violet':     [[.6,.25,.1,.1],[.1,.1,.25,0],[.9,.15,.1,.5]],
   'B&W Wood':   [[1,0,0,0],[1,0,0,0],[1,0,0,0]],
 };
-let current = 'Flamingo', src = null;
+let current = 'Goldie', src = null;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d', {willReadFrequently:true});
 const $ = id => document.getElementById(id);
 
@@ -186,7 +186,8 @@ $('save').onclick=async()=>{
   const a=document.createElement('a');a.download=name;a.href=URL.createObjectURL(blob);a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 };
-demo();
+{const ex=new Image();ex.onload=()=>load(ex);ex.onerror=demo;ex.src='example.jpg'}
+
 </script>
 </body>
 </html>
